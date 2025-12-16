@@ -63,14 +63,7 @@ Currently, the framework supports five filters within its chain, with the flexib
 
 ![resource-access-control](../static/img/docs/introduction/data-filtering-framework.png)
 
-**6. Cloud-edge network bandwidth reduction**
-
-A [performance test](https://openyurt.io/docs/test-report/yurthub-performance-test#traffic) has shown that in a large-scale OpenYurt cluster, the cloud-edge traffic will increase rapidly if pods are deleted and recreated since the kube-proxy components on the edge nodes watch for all endpoints/endpointslices changes. It's worth mentioning that identical endpoints data is transmitted to edge nodes within the same nodepool, which may not be the most efficient approach. This is due to the fact that cloud-edge networking traffic often relies on public networks, which can incur higher costs.
-Leveraging the Yurt-Coordinator mentioned above, OpenYurt proposes to introduce a notion of pool-scoped metadata which are unique within a nodepool such as the endpoints/endpointslices data. As described in below Figure, the leader Yurthub will read the pool-scoped data from the cloud kube-apiserver and update the load to yurt-coordinator. As a result, all other YurtHubs will retrieve the pool-scoped data from the yurt-coordinator, eliminating the use of public network bandwidth for retrieving such data from the cloud kube-apiserver.
-
-![bandwidth-reduction](../static/img/docs/introduction/bandwidth-reduction.png)
-
-**7. Cloud-native edge device management**
+**6. Cloud-native edge device management**
 
 OpenYurt defines a set of APIs for managing edge devices through cloud Kubernetes controlplane. The APIs abstract the device’s basic properties, main capabilities and the data that should be transmitted between the cloud and the edge. OpenYurt provides integration with mainstream OSS IoT device management solutions, such as EdgeXFoundry using the APIs. As described in below Figure, An instance of YurtIoTDock component and EdgeXFoundry service are deployed in each nodepool. YurtIoTDock component can get the changes of Device CRD from cloud kube-apiserver and convert the desired spec of Device CRD to requests of EdgeXFoundry, then transmit the requests to EdgeXFoundry service in real-time. On the other hand, YurtIoTDock can subscribe to the device status from EdgeXFoundry service, and update the status of Device CRD when status is changed.
 
