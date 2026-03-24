@@ -63,13 +63,5 @@ Note: The Raven Controller Manger required by the Raven component is refactured 
 | v0.3.0  | openyurt/raven-agent:v0.3.0 | 2023.1  | feature    | Support node IP forwarding                                         |
 | v0.4.0  | openyurt/raven-agent:0.4.0  | 2023.11 | feature    | Support raven l7 proxy                                             |
 | v0.4.1  | openyurt/raven-agent:0.4.1  | 2024.3  | feature    | Support raven l3 NAT traverse                                      |
-## 5. future plan
-
-- Support SLB as public network exporter for gateway  【[issue #22](https://github.com/openyurtio/raven/issues/22)】 
-- Support NAT traversal 【[issue #13](https://github.com/openyurtio/raven/issues/13)】 
-- Support distribute route path decision 【[issue #14](https://github.com/openyurtio/raven/issues/14)】
-  - route path cost evaluation
-  - shortest path decision 
-  - keep networking connection alive during paths change
-
-Welcome interested students to join us and contribute code!!
+| v0.4.2  | openyurt/raven-agent:0.4.2  | 2024.4  | feature    | Support compatibility with iptables-nft                                      |
+| v0.4.3  | openyurt/raven-agent:0.4.3  | 2024.12  | feature    | primarily focuses on stability improvements and bug fixes to enhance overall network reliability.                                      |
