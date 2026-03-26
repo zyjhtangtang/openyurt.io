@@ -2,16 +2,6 @@
 title: How to Build and Test
 ---
 
-In [OpenYurt repository](https://github.com/openyurtio/openyurt), currently`(v0.7.0, commit: 68a18ee)` 7 components are contained, including:
-
-1. yurthub
-2. yurt-controller-manager
-3. yurt-tunnel-server
-4. yurt-tunnel-agent
-5. yurtctl
-6. yurtadm
-7. yurt-node-servant
-
 This article will give you an introduction of how to build and test the code after development of above components.
 
 ## How to build
@@ -34,7 +24,7 @@ This command compiles yurtadm based on the OS and architecture of the local host
 make docker-build TARGET_PLATFORMS="${TARGET_PLATFORMS}" REGION="${your_region}"
 ```
 
-`TARGET_PLATFORMS`: indicates the OS and architecture to which the component will run. Currently, Linux/amd64, Linux/arm, and Linux/arm64 are supported.
+`TARGET_PLATFORMS`: indicates the OS and architecture to which the component will run. Currently, linux/amd64, linux/arm, and linux/arm64 are supported.
 
 `REGION`: This parameter affects the GOPROXY used during compilation. Users in China are advised to set `REGION=cn` to ensure proper construction (cn indicates `GOPROXY=https://goproxy.cn`).
 
