@@ -100,6 +100,7 @@ module.exports = {
                 {
                     'Observability': [
                         'user-manuals/observability/prometheus',
+                        'user-manuals/observability/metrics-server',
                     ]
                 },
                 {

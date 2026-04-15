@@ -1,5 +1,5 @@
 ---
-title: Collecting edge node metrics with Metrics Server
+title: Metrics Server
 ---
 
 This guide explains how to run **metrics-server** in the cloud so it can scrape resource usage metrics from edge nodes (kubelet) in an OpenYurt cluster.
