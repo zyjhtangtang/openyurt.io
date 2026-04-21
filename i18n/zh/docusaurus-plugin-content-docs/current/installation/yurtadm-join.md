@@ -77,126 +77,41 @@ rm -rf /etc/cni/net.d
 
 ## 2. 在存量的K8s节点上安装OpenYurt Node组件
 
-下述操作，仅仅针对已经是Kubernetes集群的工作节点。
+下述操作，仅仅针对已经是 Kubernetes 集群的工作节点（推荐节点由 kubeadm 方式部署，且宿主机使用 `systemd`）。OpenYurt 提供了一种声明式的 **Label-Driven YurtHub (基于标签驱动的自动转换)** 机制来将普通节点纳管为边缘节点。
 
-### 2.1 给节点打标签
+### 2.1 convert
 
-OpenYurt需要根据节点的`openyurt.io/is-edge-worker`标签区分云端节点和边缘节点，从而在云边断联情况下判断是否驱逐节点上Pod. 假设我们的节点`us-west-1.192.168.0.88`是一个边缘节点，则
+假设我们需要将一个存量的 Kubernetes 节点接入单元化管理并开启边缘自治能力。
 
-```bash
-$ kubectl label node us-west-1.192.168.0.88 openyurt.io/is-edge-worker=true
-node/us-west-1.192.168.0.88 labeled
-```
-
-> 如果`us-west-1.192.168.0.88`不是一个边缘节点，则将`true`改为`false`即可
-
-为了激活自治模式，我们需要通过如下命令给边缘节点添加注解。[持续时间记录在此处](https://pkg.go.dev/maze.io/x/duration#ParseDuration).
-
-```bash
-$ kubectl annotate node us-west-1.192.168.0.88 node.openyurt.io/autonomy-duration=0
-node/us-west-1.192.168.0.88 annotated
-```
-
-如果希望使用OpenYurt的单元化管理能力，我们可以将该节点加入节点池中：
+首先，确保你创建了对应的节点池 (`NodePool`) 对象，且其类型为 `Edge`：
 
 ```bash
 $ cat <<EOF | kubectl apply -f -
-apiVersion: apps.openyurt.io/v1alpha1
+apiVersion: apps.openyurt.io/v1beta2
 kind: NodePool
 metadata:
   name: worker
 spec:
   type: Edge
 EOF
-$ kubectl label node us-west-1.192.168.0.87 apps.openyurt.io/desired-nodepool=worker
 ```
 
-### 2.2 部署Edge工作模式的Yurthub
-
-- 从[openyurt repo](https://github.com/openyurtio/openyurt/blob/master/config/setup/yurthub.yaml)获取yurthub.yaml，执行如下修改后上传到边缘节点的/etc/kubernets/manifests目录。
-- 获取 apiserver 的地址 (即ip:port) 和 [bootstrap token](https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/) ，用于替换模板文件 `yurthub.yaml` 中的对应值
-
-在下面的命令中，我们假设 apiserver 的地址是 `1.2.3.4:5678`，bootstrap token 是 `07401b.f395accd246ae52d`
+接着，只需赋予存量节点对应的节点池标签，即可触发向 OpenYurt 的自动转换：
 
 ```bash
-$ vi /etc/kubernetes/manifests/yurt-hub.yaml
-...
-    command:
-    - yurthub
-    - --v=2
-    - --server-addr=https://1.2.3.4:5678
-    - --node-name=$(NODE_NAME)
-    - --join-token=07401b.f395accd246ae52d
-...
+$ kubectl label node us-west-1.192.168.0.87 apps.openyurt.io/nodepool=worker
 ```
 
-Yurthub 将在几分钟内准备就绪。
+**转换过程说明与业务影响：**
+- *自动处理：* 打上标签后，`YurtNodeConversionController` 将自动调度 `node-servant` Job 在宿主机上执行转换操作：包括下发 `yurthub` systemd 服务、为 Kubelet 追加本地代理配置、并在最后打上 `openyurt.io/is-edge-worker=true`。
+- *业务感知：* 为了让原本在跑的工作负载重新连接至本地的 `yurthub` APIServer 出口，控制平面会删除这台节点上的Pod 并触发其重建。**请务必注意**，在这短暂的处理期间可能会影响业务可用性，裸 Pod 将极具风险，请提前做好节点级的迁移准备或具备故障高可用预案。
 
-### 2.3 配置Kubelet
-
-接下来需要重置kubelet服务，让kubelet通过Yurthub访问apiserver (以下步骤假设我们以root身份登录到边缘节点)。由于 kubelet 会通过 http 连接 Yurthub，所以我们为 kubelet 服务创建一个新的 kubeconfig 文件。
+### 2.2 revert
+若是未来你希望**剥离**该节点，使其恢复到原生的 Kubernetes 直连 APIServer 的状态（Revert）：
 
 ```bash
-mkdir -p /var/lib/openyurt
-cat << EOF > /var/lib/openyurt/kubelet.conf
-apiVersion: v1
-clusters:
-- cluster:
-    server: http://127.0.0.1:10261
-  name: default-cluster
-contexts:
-- context:
-    cluster: default-cluster
-    namespace: default
-    user: default-auth
-  name: default-context
-current-context: default-context
-kind: Config
-preferences: {}
-EOF
+$ kubectl label node us-west-1.192.168.0.87 apps.openyurt.io/nodepool-
 ```
+控制器会自动卸载 YurtHub，撤销 kubelet 配置上的参数覆写并重启恢复。
 
-为了让 kubelet 使用新的 kubeconfig，我们编辑 kubelet 服务的 drop-in 文件(即 `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` 或者  `/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf` 在 CentOS 系统上))。
-
-```bash
-sed -i "s|KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=\/etc\/kubernetes\/bootstrap-kubelet.conf\ --kubeconfig=\/etc\/kubernetes\/kubelet.conf|KUBELET_KUBECONFIG_ARGS=--kubeconfig=\/var\/lib\/openyurt\/kubelet.conf|g" \
-    /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-```
-
-然后，我们重启 kubelet 服务。
-
-```bash
-# assume we are logged in to the edge node already
-$ systemctl daemon-reload && systemctl restart kubelet
-```
-
-最后，当重启Kubelet之后需要确认节点状态是否Ready。
-
-```bash
-$ kubectl get nodes
-NAME                     STATUS   ROLES    AGE     VERSION
-us-west-1.192.168.0.87   Ready    <none>   3d23h   v1.20.11
-us-west-1.192.168.0.88   Ready    <none>   3d23h   v1.20.11
-```
-
-### 2.4 重建节点上的Pods
-
-当安装完Yurthub并且调整好Kubelet配置后，为了让节点上所有Pods(Yurthub除外)都可以通过Yurthub访问Kube-apiserver，所以需要重建节点上所有Pods(Yurthub pod除外)。请务必确认该操作对生产环境的影响后再执行。
-
-```bash
-$ kubectl get pod -A -o wide | grep us-west-1.192.168.0.88
-kube-system   yurt-hub-us-west-1.192.168.0.88           1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-kube-system   coredns-qq6dk                             1/1     Running   0          19d     10.148.2.197   us-west-1.192.168.0.88   <none>           <none>
-kube-system   kube-flannel-ds-j698r                     1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-kube-system   kube-proxy-f5qvr                          1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-
-// 删除节点上所有pods(Yurthub pod除外)
-$ kubectl -n kube-system delete pod coredns-qq6dk kube-flannel-ds-j698r kube-proxy-f5qvr
-
-// 确认节点上所有pods正常运行
-$ kubectl get pod -A -o wide | grep us-west-1.192.168.0.88
-kube-system   yurt-hub-us-west-1.192.168.0.88           1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-kube-system   coredns-qq6ad                             1/1     Running   0          19d     10.148.2.198   us-west-1.192.168.0.88   <none>           <none>
-kube-system   kube-flannel-ds-j123d                     1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-kube-system   kube-proxy-a2qdc                          1/1     Running   0          19d     172.16.0.32    us-west-1.192.168.0.88   <none>           <none>
-```
+> 旧版本中用户手工打上 `openyurt.io/is-edge-worker=true` 的操作将被 Controller 完全接管。目前该标签为控制器维护的只读事实标签，不再建议用户人工修改。
